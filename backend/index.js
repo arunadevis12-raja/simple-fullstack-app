@@ -1,19 +1,16 @@
 const express = require('express');
-const fs = require("fs");
-const path = require("path");
 const cors=require('cors');
+const mongoose = require('mongoose');
+const User=require("./models/User");
+
 
 const app=express();
 app.use(cors());
 app.use(express.json());
 
-const usersFile = path.join(__dirname, "users.json");
-
-// Create users.json if it doesn't exist
-if (!fs.existsSync(usersFile)) {
-  fs.writeFileSync(usersFile, "[]");
-}
-
+mongoose.connect("mongodb://127.0.0.1:27017/simple_fullstack")
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => console.log(err));
 
 let users=[];
 
@@ -21,29 +18,51 @@ app.get('/',(req,res)=>{
     res.send('Node.js server is running');
 });
 
-app.post('/register',(req,res)=>{
+app.post('/register',async (req,res)=>{
     const{name,email,password}=req.body;
-      const users = JSON.parse(fs.readFileSync(usersFile, "utf-8"));
+      console.log("Incoming data:", req.body);
 
-    users.push({name,email,password});
-      fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
+    const existing = await User.findOne({ email });
+    if (existing) {
+      return res.status(400).json({ message: "User already exists" });
+   }
+    const user=new User({name,email,password});
+      const savedUser = await user.save();
+          console.log("Saved user:", savedUser);
+   
+      res.json({ message: "User registered successfully" });
 
-    res.json({message:'User registered successfully'});
 });
 
-app.post('/login',(req,res)=>{
-    const {name,email,password}=req.body;
-      const users = JSON.parse(fs.readFileSync(usersFile, "utf-8"));
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-    const user=users.find(
-        u=>u.email==email && u,password==password
-    );
+    console.log(email, password); // debug
 
-    if(user){
-        res.json({message:'Login successful',user});
-    }else{
-        res.status(401).json({message:'Invalid User'});
+    const user = await User.findOne({ email: email });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    // plain password check (for now)
+    if (user.password !== password) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    res.json({ message: 'Login successful' });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
+app.get("/",(req,res)=>{
+  res.send("Backend running");
 });
 
 app.listen(5000, () => {
